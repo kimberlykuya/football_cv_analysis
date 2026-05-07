@@ -1,0 +1,17 @@
+
+> flowtrace-frontend@0.1.0 dev
+> next dev --port 3000
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.56.1:3000
+✓ Ready in 6.5s
+Creating turbopack project {
+  dir: 'C:\\Users\\USER\\Documents\\football_analysis\\frontend',
+  testMode: true
+}
+
+○ Compiling / ...
+ GET / 200 in 11.5s (next.js: 10.4s, application-code: 1108ms)
+ GET / 200 in 440ms (next.js: 30ms, application-code: 410ms)
+ GET / 200 in 380ms (next.js: 15ms, application-code: 365ms)
