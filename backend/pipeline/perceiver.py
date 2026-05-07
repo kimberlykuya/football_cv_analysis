@@ -19,17 +19,45 @@ DEFAULT_TRACKER = "bytetrack.yaml"
 DEFAULT_BATCH_SIZE = 16
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from error
+
+
 class PerceiverAgent:
     def __init__(
         self,
         model_path: str = DEFAULT_MODEL_PATH,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> None:
+        if DEVICE.type != "cuda" and not _env_bool("ALLOW_CPU_FALLBACK", True):
+            raise RuntimeError(
+                "ROCm PyTorch is not active: torch.cuda.is_available() is false "
+                "and ALLOW_CPU_FALLBACK=false"
+            )
+
         selected_model_path = os.getenv("YOLO_MODEL_PATH", model_path)
         resolved_model_path = self._resolve_model_path(selected_model_path)
         self.model = YOLO(str(resolved_model_path))
         self.model.to(DEVICE)
-        self.batch_size = batch_size
+        self.batch_size = _env_int(
+            "YOLO_BATCH_SIZE",
+            64 if DEVICE.type == "cuda" else batch_size,
+        )
+        self.imgsz = _env_int("YOLO_IMGSZ", 640)
+        self.half = _env_bool("YOLO_HALF", DEVICE.type == "cuda")
         self.team_classifier = TeamClassifier()
         self.pitch_transformer = PitchTransformer()
         self.video_writer = VideoWriter()
@@ -120,6 +148,8 @@ class PerceiverAgent:
                 classes=[0],
                 conf=0.3,
                 device=DEVICE,
+                imgsz=self.imgsz,
+                half=self.half and DEVICE.type == "cuda",
                 verbose=False,
             )
 

@@ -16,7 +16,7 @@ Processes raw match video through three AI agents: **Perceiver** (CV tracking), 
 | **Memory** | ChromaDB + Sentence Transformers | Cross-match patterns + per-match RAG |
 | **Orchestration** | LangGraph | Multi-agent state machine |
 | **API** | FastAPI | Backend service |
-| **Frontend** | Next.js 16 + React 19 + TypeScript | Dashboard UI |
+| **Frontend** | Next.js 16 + React 19 + TypeScript + Node 20+ | Dashboard UI |
 
 ---
 
@@ -51,7 +51,7 @@ Batch 16: 312.8 frames/sec  (7.4x faster) ← Production target
 
 ### Prerequisites
 - Python 3.11+
-- Node.js 18+
+- Node.js 20.9+
 - (Optional) AMD MI300X with ROCm 6.2
 
 ### Backend Setup
@@ -236,6 +236,36 @@ If DeepSeek-V4 unavailable, `backend/agents/llm.py` falls back to mock responses
 
 ## AMD MI300X Setup
 
+For a fresh AMD Cloud MI300X instance, use the consolidated setup script from the repo root:
+
+```bash
+sed -i 's/\r$//' infra/*.sh
+bash infra/setup_amd_env.sh
+```
+
+The script creates `.venv`, installs backend requirements, installs ROCm PyTorch, verifies GPU runtime, installs Node 20+ when needed, installs frontend dependencies, and checks for local assets.
+
+Runtime configuration lives in `.env.amd.example`:
+
+```bash
+set -a && source .env.amd.example && set +a
+```
+
+Fill in `FEATHERLESS_API_KEY` with a rotated key and replace `<gpu-public-ip>` in `NEXT_ALLOWED_DEV_ORIGINS`.
+
+`yolo26x.pt` and real demo videos are intentionally not stored in normal Git. Copy them separately:
+
+```powershell
+scp C:\Users\USER\Documents\football_analysis\yolo26x.pt root@<gpu-ip>:/root/football_cv_analysis/yolo26x.pt
+scp C:\path\to\real-football-clip.mp4 root@<gpu-ip>:/root/football_cv_analysis/test_video.mp4
+```
+
+If you only need a smoke-test video:
+
+```bash
+python infra/create_test_video.py
+```
+
 Verify GPU availability:
 
 ```bash
@@ -245,9 +275,11 @@ bash infra/amd_setup.sh
 Should output:
 ```
 GPU Product Name: AMD MI300X
-CUDA is available: True
-CUDA Device: AMD MI300X
+cuda_available=True
+device_0=AMD Instinct MI300X...
 ```
+
+If `cuda_available=False`, PyTorch is CPU-only and the MI300X is not being used by YOLO or embeddings.
 
 ---
 
@@ -269,11 +301,14 @@ CUDA Device: AMD MI300X
 
 1. Create instance with MI300X GPU
 2. Clone repo: `git clone <your-repo>`
-3. Install deps: `python -m pip install -r backend/requirements.txt && cd frontend && npm install`
-4. Start backend: `python -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8001`
-5. Export `FEATHERLESS_API_KEY=<your-key>`, `DEEPSEEK_BASE_URL=https://api.featherless.ai/v1`, `ALLOW_MOCK_LLM=false`, and `YOLO_MODEL_PATH=yolo26x.pt`
-6. Start frontend: `cd frontend && npm run build && npm start`
-7. Access on instance IP:3000
+3. Copy `yolo26x.pt` and a real demo clip separately if they are not in Git
+4. Run setup: `bash infra/setup_amd_env.sh`
+5. Load env: `set -a && source .env.amd.example && set +a`
+6. Run checks: `bash infra/amd_setup.sh && python backend/test_backend.py && python backend/test_pipeline.py`
+7. Start backend: `bash infra/start_backend.sh`
+8. Start frontend dev: `PUBLIC_IP=<gpu-ip> bash infra/start_frontend_dev.sh`
+9. Start frontend prod: `bash infra/start_frontend_prod.sh`
+10. Access on instance IP:3000
 
 See `.env.production` template for all required variables.
 
@@ -314,6 +349,12 @@ flowtrace/
 │   └── package.json
 ├── infra/
 │   ├── amd_setup.sh                 # GPU verification
+│   ├── setup_amd_env.sh             # Fresh MI300X setup
+│   ├── check_gpu_runtime.py          # PyTorch ROCm validation
+│   ├── create_test_video.py          # Synthetic smoke-test clip
+│   ├── start_backend.sh              # Background FastAPI launcher
+│   ├── start_frontend_dev.sh         # Next.js dev launcher
+│   ├── start_frontend_prod.sh        # Next.js production launcher
 │   ├── start_vllm.sh                # vLLM startup
 │   └── start_sglang.sh              # SGLang startup
 │   ├── benchmark.py                  # Throughput benchmark
@@ -327,9 +368,13 @@ flowtrace/
 
 - **Mock LLM fallback**: If DeepSeek-V4 is unavailable and `ALLOW_MOCK_LLM=true`, `llm.py` returns mock responses automatically.
 - **LLM strict mode**: Set `ALLOW_MOCK_LLM=false` in deployment to fail fast on Featherless/API issues.
+- **GPU strict mode**: Set `ALLOW_CPU_FALLBACK=false` in deployment to fail fast when ROCm PyTorch is not active.
 - **ChromaDB persistence**: Memory stores at `./flowtrace_db/team_memory` and `./flowtrace_db/match_rag`. Auto-created on startup.
 - **Video uploads**: Stored in `./uploads/`. Clean up old videos to save disk space.
 - **YOLO model path**: Override detector weights with `YOLO_MODEL_PATH`; default is `yolo26x.pt` resolved from repo root.
+- **YOLO tuning**: Use `YOLO_BATCH_SIZE`, `YOLO_IMGSZ`, and `YOLO_HALF` to tune MI300X throughput.
+- **Embedding tuning**: Use `EMBED_BATCH_SIZE` to raise SentenceTransformer batch size on GPU.
+- **Next dev origins**: Use `NEXT_ALLOWED_DEV_ORIGINS=<gpu-ip>,http://<gpu-ip>:3000` to debug through the public IP without HMR origin warnings.
 - **Field naming**: Backend uses snake_case (`match_id`, `team_id`); frontend JS uses camelCase (`matchId`, `teamId`). API routes handle conversion.
 
 ---
@@ -354,8 +399,31 @@ flowtrace/
 | `ChromaDB permission error` | `mkdir -p ./flowtrace_db/team_memory ./flowtrace_db/match_rag` |
 | `YOLOv26 model download hangs` | Pre-download: `python -c "from ultralytics import YOLO; YOLO('yolo26x.pt')"` |
 | `DeepSeek-V4 auth/API error` | Check `FEATHERLESS_API_KEY`, `DEEPSEEK_BASE_URL=https://api.featherless.ai/v1`, and model access |
-| `Frontend build fails (Node.js)` | Ensure Node ≥18: `node --version`; try `npm cache clean --force && npm install` |
-| `GPU out of memory` | Reduce batch size or video resolution; see `backend/pipeline/perceiver.py` line 40 |
+| `Frontend build fails (Node.js)` | Ensure Node ≥20.9: `node --version`; try `npm cache clean --force && npm install` |
+| `Next dev HMR origin warning` | Run `PUBLIC_IP=<gpu-ip> bash infra/start_frontend_dev.sh` or set `NEXT_ALLOWED_DEV_ORIGINS` |
+| `torch.cuda.is_available() is false` | Reinstall ROCm PyTorch in `.venv`; rerun `python infra/check_gpu_runtime.py` |
+| `infra/*.sh set: pipefail invalid option` | Run `sed -i 's/\r$//' infra/*.sh` |
+| `GPU out of memory` | Reduce `YOLO_BATCH_SIZE` or `YOLO_IMGSZ` |
+
+## Utilization Checks
+
+Watch GPU activity during analysis:
+
+```bash
+watch -n 1 rocm-smi
+```
+
+Run YOLO batch throughput checks:
+
+```bash
+python backend/benchmark.py --model yolo26x.pt --batch-sizes 16,32,64,128
+```
+
+Confirm required packages:
+
+```bash
+python -m pip show uvicorn langgraph lap ultralytics torch
+```
 
 ---
 

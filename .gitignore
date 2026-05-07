@@ -20,6 +20,7 @@ uploads/
 flowtrace_db/
 .env*
 !.env.example
+!.env.amd.example
 frontend/next-dev.err
 
 yolo26x.pt

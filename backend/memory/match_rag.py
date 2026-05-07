@@ -132,15 +132,22 @@ Always cite timestamps so the coach can jump to the exact moment.
         return f"[{timestamp}s] " + ", ".join(observed_players)
 
     def _embed(self, documents: list[str]) -> list[list[float]]:
+        import os
         import torch
         from sentence_transformers import SentenceTransformer
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device.type != "cuda" and os.getenv("ALLOW_CPU_FALLBACK", "true").strip().lower() in {"0", "false", "no", "off"}:
+            raise RuntimeError(
+                "ROCm PyTorch is not active for embeddings and ALLOW_CPU_FALLBACK=false"
+            )
+        default_batch_size = 256 if device.type == "cuda" else 64
+        batch_size = int(os.getenv("EMBED_BATCH_SIZE", str(default_batch_size)))
         if self.embedder is None:
             self.embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2").to(device)
         return self.embedder.encode(
             documents,
-            batch_size=64,
+            batch_size=batch_size,
             device=str(device),
             normalize_embeddings=True,
         ).tolist()
