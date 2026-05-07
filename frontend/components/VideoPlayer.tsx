@@ -11,10 +11,16 @@ type VideoPlayerProps = {
 
 export default function VideoPlayer({ src, videoRef, timestamps = [], onJumpTo }: VideoPlayerProps) {
   return (
-    <div>
-      <video ref={videoRef} controls src={src ?? undefined} style={{ width: "100%" }} />
+    <div className="video-player">
+      {src ? (
+        <video ref={videoRef} controls src={src} />
+      ) : (
+        <div className="video-placeholder">
+          <span>Upload a match clip to preview footage.</span>
+        </div>
+      )}
       {timestamps.length > 0 && onJumpTo ? (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <div className="timestamp-row">
           {timestamps.map((timestamp) => (
             <button key={timestamp} type="button" onClick={() => onJumpTo(timestamp)}>
               {timestamp.toFixed(1)}s
@@ -25,4 +31,3 @@ export default function VideoPlayer({ src, videoRef, timestamps = [], onJumpTo }
     </div>
   )
 }
-

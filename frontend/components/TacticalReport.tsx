@@ -12,52 +12,31 @@ function formatMetricName(key: string): string {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div
-      style={{
-        background: "#f5f5f5",
-        borderRadius: 8,
-        padding: "12px 16px",
-        minWidth: 140,
-      }}
-    >
-      <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>
-        {formatMetricName(label)}
-      </div>
-      <div style={{ fontSize: 20, fontWeight: 700 }}>
-        {typeof value === "number" ? value.toFixed(1) : String(value)}
-      </div>
+    <div className="metric-card">
+      <span>{formatMetricName(label)}</span>
+      <strong>{typeof value === "number" ? value.toFixed(1) : String(value)}</strong>
     </div>
   )
 }
 
 function PressureZoneGrid({ zones }: { zones: Record<string, number[][]> }) {
   return (
-    <div>
+    <div className="pressure-section">
       {Object.entries(zones).map(([team, grid]) => (
-        <div key={team} style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>
-            {team.replace("_", " ").toUpperCase()} — Pressure Heatmap (%)
-          </div>
+        <div key={team} className="pressure-team">
+          <h4>{team.replace("_", " ").toUpperCase()} pressure heatmap</h4>
           <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${grid[0]?.length ?? 2}, 1fr)`,
-              gap: 4,
-              maxWidth: 300,
-            }}
+            className="pressure-grid"
+            style={{ gridTemplateColumns: `repeat(${grid[0]?.length ?? 2}, 1fr)` }}
           >
             {grid.flatMap((row, ri) =>
               row.map((val, ci) => (
                 <div
                   key={`${ri}-${ci}`}
+                  className="pressure-cell"
                   style={{
-                    background: `rgba(220, 38, 38, ${Math.min(val / 50, 1)})`,
-                    color: val > 25 ? "#fff" : "#333",
-                    padding: "8px 4px",
-                    textAlign: "center",
-                    borderRadius: 4,
-                    fontSize: 13,
-                    fontWeight: 600,
+                    background: `rgba(229, 57, 53, ${Math.min(val / 50, 1)})`,
+                    color: val > 25 ? "#fff" : "var(--ink)",
                   }}
                 >
                   {val}%
@@ -77,21 +56,15 @@ function FormationDisplay({
   formations: Record<string, number[][]>
 }) {
   return (
-    <div>
+    <div className="formation-list">
       {Object.entries(formations).map(([team, samples]) => {
         const latest = samples[samples.length - 1]
         const formationStr = latest ? latest.join("-") : "unknown"
         return (
-          <div key={team} style={{ marginBottom: 12 }}>
-            <span style={{ fontWeight: 600 }}>
-              {team.replace("_", " ").toUpperCase()}:
-            </span>{" "}
-            <span style={{ fontSize: 18, fontWeight: 700 }}>
-              {formationStr}
-            </span>
-            <span style={{ color: "#888", fontSize: 13, marginLeft: 8 }}>
-              (from {samples.length} samples)
-            </span>
+          <div key={team} className="formation-row">
+            <span>{team.replace("_", " ").toUpperCase()}</span>
+            <strong>{formationStr}</strong>
+            <small>{samples.length} samples</small>
           </div>
         )
       })}
@@ -102,77 +75,52 @@ function FormationDisplay({
 export default function TacticalReport({ analysis }: TacticalReportProps) {
   if (!analysis) {
     return (
-      <section style={{ padding: 24, color: "#888" }}>
-        Tactical report coming soon — upload and analyze a video first.
+      <section className="empty-state">
+        <p className="eyebrow">Tactical Report</p>
+        <h2>Upload and analyze a video to populate match intelligence.</h2>
       </section>
     )
   }
 
   return (
-    <section style={{ display: "grid", gap: 24 }}>
-      <h2 style={{ margin: 0 }}>Tactical Report</h2>
-
-      {/* Tactical Summary */}
-      <div>
-        <h3 style={{ margin: "0 0 8px" }}>AI Tactical Analysis</h3>
-        <div
-          style={{
-            background: "#fafafa",
-            border: "1px solid #e5e5e5",
-            borderRadius: 8,
-            padding: 16,
-            lineHeight: 1.7,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {analysis.tactical_summary || "No summary generated."}
-        </div>
+    <section className="report-grid">
+      <div className="section-heading">
+        <p className="eyebrow">Tactical Report</p>
+        <h2>Match intelligence</h2>
       </div>
 
-      {/* Cross-Match Report */}
-      {analysis.cross_match_report && (
-        <div>
-          <h3 style={{ margin: "0 0 8px" }}>Cross-Match Scouting Report</h3>
-          <div
-            style={{
-              background: "#f0f4ff",
-              border: "1px solid #d0d8f0",
-              borderRadius: 8,
-              padding: 16,
-              lineHeight: 1.7,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {analysis.cross_match_report}
-          </div>
-        </div>
-      )}
+      <div className="analysis-block primary">
+        <h3>AI Tactical Analysis</h3>
+        <p>{analysis.tactical_summary || "No summary generated."}</p>
+      </div>
 
-      {/* Key Metrics */}
+      {analysis.cross_match_report ? (
+        <div className="analysis-block">
+          <h3>Cross-Match Scouting Report</h3>
+          <p>{analysis.cross_match_report}</p>
+        </div>
+      ) : null}
+
       <div>
-        <h3 style={{ margin: "0 0 12px" }}>Key Metrics</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        <h3>Key Metrics</h3>
+        <div className="metric-grid">
           {Object.entries(analysis.metrics ?? {}).map(([key, value]) => (
             <MetricCard key={key} label={key} value={value} />
           ))}
         </div>
-        <p style={{ fontSize: 13, color: "#888", marginTop: 8 }}>
-          {analysis.events_detected} tactical events detected
-        </p>
+        <p className="muted">{analysis.events_detected} tactical events detected</p>
       </div>
 
-      {/* Pressure Zones */}
-      <div>
-        <h3 style={{ margin: "0 0 12px" }}>Pressure Zones</h3>
-        <PressureZoneGrid zones={analysis.pressure_zones ?? {}} />
-      </div>
-
-      {/* Formations */}
-      <div>
-        <h3 style={{ margin: "0 0 12px" }}>Detected Formations</h3>
-        <FormationDisplay formations={analysis.formations ?? {}} />
+      <div className="report-columns">
+        <div>
+          <h3>Pressure Zones</h3>
+          <PressureZoneGrid zones={analysis.pressure_zones ?? {}} />
+        </div>
+        <div>
+          <h3>Detected Formations</h3>
+          <FormationDisplay formations={analysis.formations ?? {}} />
+        </div>
       </div>
     </section>
   )
 }
-

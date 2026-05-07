@@ -8,6 +8,7 @@ langgraph==1.1.10
 chromadb==1.5.9
 sentence-transformers==5.4.1
 ultralytics==8.4.46
+lap==0.5.13
 opencv-python==4.13.0.92
 numpy==2.4.4
 scikit-learn==1.8.0

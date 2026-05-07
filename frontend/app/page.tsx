@@ -68,38 +68,65 @@ export default function HomePage() {
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>FlowTrace</h1>
-      <p>Upload a match clip, inspect the tactical report, and ask questions over evidence.</p>
+    <main className="app-shell">
+      <section className="hero-panel">
+        <div>
+          <p className="eyebrow">AMD MI300X Tactical Workbench</p>
+          <h1>FlowTrace</h1>
+          <p className="hero-copy">
+            Upload match footage, generate a tactical report, then ask evidence-backed
+            coaching questions over the exact video moments.
+          </p>
+        </div>
+        <div className="hero-stats" aria-label="Pipeline status">
+          <span>YOLOv26 tracking</span>
+          <strong>{analysis ? analysis.events_detected : 0}</strong>
+          <span>events detected</span>
+        </div>
+      </section>
 
-      <section style={{ display: "grid", gap: 12, maxWidth: 720 }}>
-        <input type="file" accept="video/*" onChange={handleFileChange} />
+      <section className="control-panel">
+        <label className="file-drop">
+          <input type="file" accept="video/*" onChange={handleFileChange} />
+          <span>{videoFile ? videoFile.name : "Choose match clip"}</span>
+        </label>
         <input value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="team id" />
         <input
           value={matchLabel}
           onChange={(event) => setMatchLabel(event.target.value)}
           placeholder="match label"
         />
-        <button type="button" onClick={() => void handleAnalyze()} disabled={loading}>
+        <button className="primary-action" type="button" onClick={() => void handleAnalyze()} disabled={loading}>
           {loading ? "Analyzing..." : "Run analysis"}
         </button>
       </section>
 
-      {error ? <p>{error}</p> : null}
+      {error ? <p className="error-banner">{error}</p> : null}
 
-      <section style={{ marginTop: 24 }}>
-        <VideoPlayer src={previewUrl} videoRef={videoRef} timestamps={timestamps} onJumpTo={jumpTo} />
+      <section className="workspace-grid">
+        <div className="surface video-surface">
+          <div className="section-heading">
+            <p className="eyebrow">Source footage</p>
+            <h2>Match view</h2>
+          </div>
+          <VideoPlayer src={previewUrl} videoRef={videoRef} timestamps={timestamps} onJumpTo={jumpTo} />
+        </div>
+
+        <div className="surface qa-surface">
+          {analysis ? (
+            <CoachQA matchId={analysis.match_id} onJumpTo={jumpTo} onTimestampsChange={setTimestamps} />
+          ) : (
+            <div className="empty-state">
+              <p className="eyebrow">Coach Q&A</p>
+              <h2>Analyze a clip to unlock evidence search.</h2>
+            </div>
+          )}
+        </div>
       </section>
 
-      <section style={{ marginTop: 24 }}>
+      <section className="surface report-surface">
         <TacticalReport analysis={analysis} />
       </section>
-
-      {analysis ? (
-        <section style={{ marginTop: 24 }}>
-          <CoachQA matchId={analysis.match_id} onJumpTo={jumpTo} onTimestampsChange={setTimestamps} />
-        </section>
-      ) : null}
     </main>
   )
 }

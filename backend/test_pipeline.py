@@ -49,7 +49,8 @@ else:
 # Step 4: Check for errors
 print("\n4. Checking for pipeline errors...")
 if result.get('error'):
-    print(f"   [WARN] Pipeline error: {result['error']}")
+    print(f"   [FAIL] Pipeline error: {result['error']}")
+    sys.exit(1)
 else:
     print("   [OK] No pipeline errors")
 
