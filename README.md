@@ -351,6 +351,12 @@ bash infra/setup_amd_env.sh
 
 The script creates `.venv`, installs backend requirements including local VLM dependencies, installs ROCm PyTorch, verifies GPU runtime, installs Node 20+ when needed, installs frontend dependencies, and checks for local assets.
 
+The setup script auto-detects `python3.12`, `python3.11`, `python3.10`, `python3`, or `python`. If your image uses a custom interpreter path, run:
+
+```bash
+PYTHON_BIN=/path/to/python bash infra/setup_amd_env.sh
+```
+
 Setup downloads Qwen3-VL from Hugging Face with `hf download` and verifies local model load.
 
 Runtime configuration lives in `.env.amd.example`:

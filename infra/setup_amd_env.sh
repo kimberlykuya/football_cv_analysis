@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PYTHON_BIN="${PYTHON_BIN:-python3.11}"
+PYTHON_BIN="${PYTHON_BIN:-}"
 ROCM_TORCH_INDEX="${ROCM_TORCH_INDEX:-https://download.pytorch.org/whl/rocm7.0}"
 INSTALL_NODE="${INSTALL_NODE:-true}"
 INSTALL_ROCM_TORCH="${INSTALL_ROCM_TORCH:-true}"
@@ -14,6 +14,23 @@ HF_HOME="${HF_HOME:-$ROOT_DIR/.hf_cache}"
 
 echo "Normalizing shell script line endings..."
 sed -i 's/\r$//' infra/*.sh
+
+if [ -z "$PYTHON_BIN" ]; then
+  for candidate in python3.12 python3.11 python3.10 python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      PYTHON_BIN="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "ERROR: No Python interpreter found. Install Python 3.10+ or rerun with PYTHON_BIN=/path/to/python."
+  exit 1
+fi
+
+echo "Using Python interpreter: $PYTHON_BIN"
+"$PYTHON_BIN" --version
 
 echo "Creating/using Python virtualenv..."
 if [ ! -d ".venv" ]; then
