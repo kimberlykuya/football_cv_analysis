@@ -22,6 +22,8 @@ fi
 
 echo "Checking Python imports..."
 python - <<'PY'
+import os
+
 from backend.api.main import app
 from backend.graph.flowtrace_graph import run_pipeline_streaming
 from backend.agents.validator import qwen_validation_enabled
@@ -30,6 +32,11 @@ print(f"fastapi_app={app.title}")
 print(f"streaming_callable={callable(run_pipeline_streaming)}")
 print(f"qwen_validation_enabled={qwen_validation_enabled()}")
 print(f"vlm_enabled={vlm_enabled()}")
+
+if os.getenv("ALLOW_MOCK_LLM", "false").strip().lower() in {"0", "false", "no", "off"}:
+    if not os.getenv("FEATHERLESS_API_KEY"):
+        raise SystemExit("FEATHERLESS_API_KEY is required when ALLOW_MOCK_LLM=false")
+print(f"deepseek_model={os.getenv('DEEPSEEK_MODEL', '')}")
 PY
 
 if [ "${VLM_ENABLED:-false}" = "true" ]; then
@@ -43,6 +50,16 @@ fi
 
 echo "Checking GPU runtime..."
 python infra/check_gpu_runtime.py
+
+echo "Checking DeepSeek/Featherless API..."
+python - <<'PY'
+from backend.agents.llm import deepseek_health_check
+
+reply = deepseek_health_check()
+if "OK" not in reply.upper():
+    raise SystemExit(f"Unexpected DeepSeek smoke response: {reply!r}")
+print("deepseek_api=ok")
+PY
 
 echo "Building frontend..."
 (cd frontend && npm run build)

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import os
+import json
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -85,6 +86,13 @@ class GPUMonitor:
             pass
 
         try:
+            # Fall back to ROCm CLI. This is often present on AMD cloud images
+            # even when the Python amdsmi package is not importable.
+            return self._get_rocm_smi_status()
+        except Exception:
+            pass
+
+        try:
             # Fall back to NVIDIA
             return self._get_nvidia_status()
         except Exception:
@@ -112,6 +120,11 @@ class GPUMonitor:
             import amdsmi
         except ImportError:
             raise RuntimeError("amdsmi not available")
+
+        try:
+            amdsmi.amdsmi_init()
+        except Exception:
+            pass
 
         devices = amdsmi.amd_get_gpu_device_handles()
         if not devices:
@@ -142,6 +155,84 @@ class GPUMonitor:
             vram_total_mb=vram_total_mb,
             temperature_c=temp_c,
             device_name=device_name,
+            cuda_available=True,
+            timestamp=time.time(),
+        )
+
+    def _get_rocm_smi_status(self) -> GPUStatus:
+        """Get AMD ROCm GPU status via rocm-smi JSON output."""
+        result = subprocess.run(
+            [
+                "rocm-smi",
+                "--showuse",
+                "--showmemuse",
+                "--showmeminfo",
+                "vram",
+                "--showtemp",
+                "--showproductname",
+                "--json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        payload = json.loads(result.stdout)
+        if not payload:
+            raise RuntimeError("rocm-smi returned no GPU data")
+
+        first_gpu = next(iter(payload.values()))
+
+        def _number_from_value(value: object) -> float:
+            if value is None:
+                return 0.0
+            if isinstance(value, (int, float)):
+                return float(value)
+            text = str(value)
+            cleaned = "".join(char if char.isdigit() or char == "." else " " for char in text)
+            for part in cleaned.split():
+                try:
+                    return float(part)
+                except ValueError:
+                    continue
+            return 0.0
+
+        def _find_number(*needles: str) -> float:
+            for key, value in first_gpu.items():
+                normalized = key.lower()
+                if all(needle in normalized for needle in needles):
+                    return _number_from_value(value)
+            return 0.0
+
+        def _find_text(*needles: str) -> str:
+            for key, value in first_gpu.items():
+                normalized = key.lower()
+                if all(needle in normalized for needle in needles):
+                    return str(value)
+            return ""
+
+        gpu_util = _find_number("use")
+        mem_use_pct = _find_number("memory", "use")
+        vram_total_mb = _find_number("total", "vram")
+        vram_used_mb = _find_number("used", "vram")
+        if vram_total_mb and vram_total_mb > 1024 * 1024:
+            vram_total_mb = vram_total_mb / 1024 / 1024
+        if vram_used_mb and vram_used_mb > 1024 * 1024:
+            vram_used_mb = vram_used_mb / 1024 / 1024
+        if not vram_used_mb and vram_total_mb and mem_use_pct:
+            vram_used_mb = vram_total_mb * mem_use_pct / 100
+
+        temp_c = _find_number("temperature")
+        device_name = _find_text("card", "series") or _find_text("product", "name")
+        if not device_name and torch and torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name(0)
+
+        return GPUStatus(
+            gpu_util_pct=float(gpu_util),
+            vram_used_mb=float(vram_used_mb),
+            vram_total_mb=float(vram_total_mb),
+            temperature_c=float(temp_c) if temp_c else None,
+            device_name=device_name or "AMD ROCm GPU",
             cuda_available=True,
             timestamp=time.time(),
         )

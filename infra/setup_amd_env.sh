@@ -28,6 +28,12 @@ if [ -f "$LOCAL_ENV_FILE" ]; then
   set -a && source "$LOCAL_ENV_FILE" && set +a
 fi
 
+if [ "${YOLO_MODEL_PATH:-}" = "yolo11x.pt" ]; then
+  echo "Migrating stale YOLO_MODEL_PATH=yolo11x.pt to final demo model yolo26x.pt"
+  YOLO_MODEL_PATH="yolo26x.pt"
+  export YOLO_MODEL_PATH
+fi
+
 prompt_if_empty() {
   local var_name="$1"
   local prompt="$2"
@@ -65,6 +71,11 @@ BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8001}"
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 export VLM_ENABLED BACKEND_URL BACKEND_HOST BACKEND_PORT
+
+if [ "${ALLOW_MOCK_LLM:-false}" = "false" ] && [ -z "${FEATHERLESS_API_KEY:-}" ]; then
+  echo "WARN: FEATHERLESS_API_KEY is empty while ALLOW_MOCK_LLM=false."
+  echo "      Setup can continue, but final DeepSeek/Qwen API analysis will fail until the key is set."
+fi
 
 for key in FEATHERLESS_API_KEY HF_TOKEN PUBLIC_IP NEXT_ALLOWED_DEV_ORIGINS VLM_ENABLED VLM_MODEL VLM_DEVICE VLM_DTYPE VLM_IMAGE_DIR YOLO_MODEL_PATH EMBED_MODEL HF_HOME BACKEND_URL BACKEND_HOST BACKEND_PORT; do
   write_env_value "$key"
@@ -191,10 +202,9 @@ print(f"vlm_device={vlm.device}")
 PY
 
 if [ ! -f "test_video.mp4" ]; then
-  echo "WARN: test_video.mp4 is missing."
-  echo "Create a synthetic smoke test clip with:"
-  echo "  python infra/create_test_video.py"
-  echo "For final demo quality, copy a real football clip to $ROOT_DIR/test_video.mp4."
+  echo "Creating synthetic smoke test clip at test_video.mp4 ..."
+  python infra/create_test_video.py
+  echo "For final demo quality, upload a real football clip in the web app."
 fi
 
 if [ "$INSTALL_NODE" = "true" ]; then
@@ -231,6 +241,8 @@ echo "  python -m pytest -q backend/test_rag_evidence.py"
 echo "  python backend/test_pipeline.py"
 echo "  bash infra/start_backend.sh"
 echo "  bash infra/start_frontend_prod.sh"
+echo "  # Or launch both services in background for a demo:"
+echo "  bash infra/run_demo.sh"
 echo "  # In a second shell after the frontend is running:"
 echo "  VLM_ENABLED=true BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh"
 

@@ -10,7 +10,7 @@ Processes raw match video through three AI agents: **Perceiver** (CV tracking), 
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **GPU** | AMD MI300X (ROCm 6.2) | Batch YOLOv26 tracking + embeddings |
+| **GPU** | AMD MI300X (ROCm 7.0 tested) | Batch YOLOv26 tracking + embeddings |
 | **LLM** | DeepSeek-V4-Pro via Featherless | Tactical narration + coach Q&A |
 | **Validator** | Optional Qwen via Featherless | Event validation + confidence scoring |
 | **Local VLM** | Qwen3-VL-8B-Instruct | Event-frame visual evidence for RAG |
@@ -54,7 +54,7 @@ Batch 16: 312.8 frames/sec  (7.4x faster) ← Production target
 ### Prerequisites
 - Python 3.11+
 - Node.js 20.9+
-- (Optional) AMD MI300X with ROCm 6.2
+- (Optional) AMD MI300X with ROCm 7.0
 
 ### Backend Setup
 
@@ -117,6 +117,41 @@ If FastAPI is on `localhost:8001` and `FEATHERLESS_API_KEY` is configured:
 
 ---
 
+## One-Command AMD Demo Setup
+
+On a fresh AMD Developer Cloud MI300X instance, from the repo root:
+
+```bash
+sed -i 's/\r$//' infra/*.sh
+bash infra/setup_amd_env.sh
+bash infra/run_demo.sh
+```
+
+`setup_amd_env.sh` creates `.env.amd.local`, prompts once for your Featherless API key and optional Hugging Face token, installs Python/frontend dependencies, installs ROCm PyTorch, downloads Qwen3-VL, downloads the embedding model, prepares `yolo26x.pt`, and creates a smoke-test video if one is missing.
+
+`run_demo.sh` restarts stale backend/frontend processes, builds the production frontend, starts both services in the background, and prints the URLs plus log commands.
+
+For final judging, keep these values in `.env.amd.local`:
+
+```bash
+FEATHERLESS_API_KEY="your-real-key"
+ALLOW_MOCK_LLM=false
+YOLO_MODEL_PATH="yolo26x.pt"
+VLM_ENABLED=true
+VLM_MODEL=Qwen/Qwen3-VL-8B-Instruct
+```
+
+Useful live checks:
+
+```bash
+tail -f logs/backend.log
+tail -f logs/frontend.log
+watch -n 0.5 rocm-smi
+VLM_ENABLED=true BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh
+```
+
+---
+
 ## API Endpoints
 
 ### POST `/api/analyze`
@@ -175,6 +210,7 @@ Event types currently emitted:
 
 - `progress` - pipeline stage progress
 - `tactical_event` - event marker ready for feed/timeline
+- `summary_chunk` - live DeepSeek tactical analysis text
 - `complete` - final `AnalyzeResponse` payload
 - `error` - terminal failure payload
 

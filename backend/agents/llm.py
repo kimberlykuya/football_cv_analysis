@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from typing import Any, Iterator
 
@@ -40,13 +41,16 @@ def strip_reasoning(content: str) -> str:
 
 def deepseek_chat(messages: list[dict[str, Any]], temperature: float = 0.3) -> str:
     try:
+        model = os.getenv("DEEPSEEK_MODEL", DEFAULT_MODEL)
+        print(f"[LLM] DeepSeek request model={model}", file=sys.stderr)
         response = get_deepseek_client().chat.completions.create(
-            model=os.getenv("DEEPSEEK_MODEL", DEFAULT_MODEL),
+            model=model,
             messages=messages,
             temperature=temperature,
             max_tokens=4096,
         )
         content = response.choices[0].message.content or ""
+        print(f"[LLM] DeepSeek response chars={len(content)}", file=sys.stderr)
         return strip_reasoning(content)
     except Exception as e:
         allow_mock = os.getenv("ALLOW_MOCK_LLM", "true").strip().lower() in {
@@ -60,8 +64,6 @@ def deepseek_chat(messages: list[dict[str, Any]], temperature: float = 0.3) -> s
                 "DeepSeek-V4 request failed and ALLOW_MOCK_LLM is disabled"
             ) from e
 
-        # Fallback: mock response if DeepSeek-V4 unavailable
-        import sys
         print(f"[WARN DeepSeek-V4 unavailable, using mock response] {e}", file=sys.stderr)
         mock_responses = {
             "tactical": "Based on the positional data analyzed, Team A demonstrated a 4-3-3 formation with strong territorial control in the midfield. Key observations include consistent pressure in the attacking third (zone_80m) and a compact defensive shape. Team B showed a more aggressive high-line defense. Recommended adjustment: exploit the space between Team B's defensive lines with targeted through-ball transitions.",
@@ -110,13 +112,16 @@ def deepseek_chat_stream(
 ) -> Iterator[str]:
     """Stream chat completions token by token from DeepSeek."""
     try:
+        model = os.getenv("DEEPSEEK_MODEL", DEFAULT_MODEL)
+        print(f"[LLM] DeepSeek streaming request model={model}", file=sys.stderr)
         response = get_deepseek_client().chat.completions.create(
-            model=os.getenv("DEEPSEEK_MODEL", DEFAULT_MODEL),
+            model=model,
             messages=messages,
             temperature=temperature,
             max_tokens=4096,
             stream=True,
         )
+        yielded = 0
         reasoning = ""
         for chunk in response:
             if chunk.choices[0].delta.content:
@@ -126,7 +131,9 @@ def deepseek_chat_stream(
                     reasoning = reasoning.split("</think>", 1)[-1].strip()
                     reasoning = ""
                 elif "<think>" not in reasoning:
+                    yielded += len(token)
                     yield token
+        print(f"[LLM] DeepSeek streaming response chars={yielded}", file=sys.stderr)
     except Exception as e:
         allow_mock = os.getenv("ALLOW_MOCK_LLM", "true").strip().lower() in {
             "1",
@@ -139,8 +146,6 @@ def deepseek_chat_stream(
                 "DeepSeek-V4 streaming failed and ALLOW_MOCK_LLM is disabled"
             ) from e
 
-        # Fallback: yield mock response word-by-word
-        import sys
         print(f"[WARN DeepSeek-V4 unavailable, using mock streaming response] {e}", file=sys.stderr)
         
         mock_text = (
@@ -157,3 +162,13 @@ def deepseek_chat_stream(
         for word in mock_text.split():
             yield word + " "
             time.sleep(0.02)  # Small delay to simulate streaming
+
+
+def deepseek_health_check() -> str:
+    response = get_deepseek_client().chat.completions.create(
+        model=os.getenv("DEEPSEEK_MODEL", DEFAULT_MODEL),
+        messages=[{"role": "user", "content": "Reply with exactly: OK"}],
+        temperature=0,
+        max_tokens=8,
+    )
+    return strip_reasoning(response.choices[0].message.content or "")
