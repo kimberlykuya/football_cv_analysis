@@ -12,6 +12,8 @@ INSTALL_NODE="${INSTALL_NODE:-true}"
 INSTALL_ROCM_TORCH="${INSTALL_ROCM_TORCH:-true}"
 VLM_IMAGE_DIR="${VLM_IMAGE_DIR:-./uploads/vlm_frames}"
 VLM_MODEL="${VLM_MODEL:-Qwen/Qwen3-VL-8B-Instruct}"
+YOLO_MODEL_PATH="${YOLO_MODEL_PATH:-yolo11x.pt}"
+EMBED_MODEL="${EMBED_MODEL:-sentence-transformers/all-MiniLM-L6-v2}"
 HF_HOME="${HF_HOME:-$ROOT_DIR/.hf_cache}"
 
 echo "Normalizing shell script line endings..."
@@ -64,7 +66,7 @@ BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 export VLM_ENABLED BACKEND_URL BACKEND_HOST BACKEND_PORT
 
-for key in FEATHERLESS_API_KEY HF_TOKEN PUBLIC_IP NEXT_ALLOWED_DEV_ORIGINS VLM_ENABLED VLM_MODEL VLM_DEVICE VLM_DTYPE VLM_IMAGE_DIR HF_HOME BACKEND_URL BACKEND_HOST BACKEND_PORT; do
+for key in FEATHERLESS_API_KEY HF_TOKEN PUBLIC_IP NEXT_ALLOWED_DEV_ORIGINS VLM_ENABLED VLM_MODEL VLM_DEVICE VLM_DTYPE VLM_IMAGE_DIR YOLO_MODEL_PATH EMBED_MODEL HF_HOME BACKEND_URL BACKEND_HOST BACKEND_PORT; do
   write_env_value "$key"
 done
 
@@ -158,19 +160,25 @@ echo "Downloading local VLM model from Hugging Face: $VLM_MODEL"
 export HF_HOME
 hf download "$VLM_MODEL" --type model --cache-dir "$HF_HOME"
 
+echo "Downloading embedding model from Hugging Face: $EMBED_MODEL"
+hf download "$EMBED_MODEL" --type model --cache-dir "$HF_HOME"
+
+echo "Downloading YOLO detector model: $YOLO_MODEL_PATH"
+YOLO_MODEL_PATH="$YOLO_MODEL_PATH" python - <<'PY'
+import os
+from ultralytics import YOLO
+
+model_path = os.environ["YOLO_MODEL_PATH"]
+model = YOLO(model_path)
+print(f"yolo_model_ready={model_path}")
+PY
+
 echo "Checking local VLM model load..."
 VLM_ENABLED=true VLM_MODEL="$VLM_MODEL" python - <<'PY'
 from backend.agents.visual_evidence import get_local_vlm
 vlm = get_local_vlm()
 print(f"vlm_device={vlm.device}")
 PY
-
-echo "Checking required local assets..."
-if [ ! -f "yolo26x.pt" ]; then
-  echo "WARN: yolo26x.pt is missing."
-  echo "Copy it from your workstation:"
-  echo "  scp C:\\Users\\USER\\Documents\\football_analysis\\yolo26x.pt root@<gpu-ip>:$ROOT_DIR/yolo26x.pt"
-fi
 
 if [ ! -f "test_video.mp4" ]; then
   echo "WARN: test_video.mp4 is missing."
@@ -199,6 +207,8 @@ echo "Configured runtime defaults:"
 echo "  VLM_ENABLED=true"
 echo "  VLM_MODEL=$VLM_MODEL"
 echo "  VLM_IMAGE_DIR=$VLM_IMAGE_DIR"
+echo "  YOLO_MODEL_PATH=$YOLO_MODEL_PATH"
+echo "  EMBED_MODEL=$EMBED_MODEL"
 echo "  HF_HOME=$HF_HOME"
 echo "  QWEN_VALIDATION_ENABLED=${QWEN_VALIDATION_ENABLED:-false}"
 echo "  MATCH_RAG_DIR=./flowtrace_db/match_rag"

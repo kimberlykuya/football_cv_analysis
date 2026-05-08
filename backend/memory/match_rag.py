@@ -254,7 +254,8 @@ Always cite timestamps so the coach can jump to the exact moment.
         default_batch_size = 256 if device.type == "cuda" else 64
         batch_size = int(os.getenv("EMBED_BATCH_SIZE", str(default_batch_size)))
         if self.embedder is None:
-            self.embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2").to(device)
+            model_name = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+            self.embedder = SentenceTransformer(model_name).to(device)
         return self.embedder.encode(
             documents,
             batch_size=batch_size,
