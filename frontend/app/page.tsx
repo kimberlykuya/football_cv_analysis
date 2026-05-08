@@ -118,6 +118,12 @@ export default function HomePage() {
               }}
             />
           </div>
+          {stream.state.summaryText ? (
+            <div className="analysis-block" style={{ marginTop: "16px" }}>
+              <h3>AI Tactical Analysis</h3>
+              <p>{stream.state.summaryText}</p>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

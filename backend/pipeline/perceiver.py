@@ -14,7 +14,7 @@ from backend.pipeline.team_classifier import TeamClassifier
 from backend.pipeline.video_writer import VideoWriter
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-DEFAULT_MODEL_PATH = "yolo11x.pt"
+DEFAULT_MODEL_PATH = "yolo26x.pt"
 DEFAULT_TRACKER = "bytetrack.yaml"
 DEFAULT_BATCH_SIZE = 16
 
@@ -227,4 +227,5 @@ class PerceiverAgent:
             parts.append(f"{len(unassigned)} unassigned player(s)")
 
         return ". ".join(parts) + "."
+
 

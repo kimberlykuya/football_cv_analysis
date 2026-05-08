@@ -187,11 +187,27 @@ def run_pipeline_streaming(video_path: str, match_id: str, team_id: str) -> Iter
     try:
         yield _evt("progress", {"stage": "analyze", "progress_pct": 0})
         analyst = get_analyst()
-        state["analysis_output"] = analyst.analyze(state["perception_output"])
+        state["analysis_output"] = analyst.analyze(
+            state["perception_output"],
+            generate_summary=False,
+        )
         yield _evt("progress", {"stage": "analyze", "progress_pct": 100})
 
         for event in state["analysis_output"].get("tactical_events", []):
             yield _evt("tactical_event", event)
+
+        yield _evt("progress", {"stage": "deepseek", "progress_pct": 0})
+        summary_parts: list[str] = []
+        for chunk in analyst.stream_tactical_analysis(
+            state["analysis_output"]["formations"],
+            state["analysis_output"]["pressure_zones"],
+            state["analysis_output"]["tactical_events"],
+            state["analysis_output"]["metrics"],
+        ):
+            summary_parts.append(chunk)
+            yield _evt("summary_chunk", {"chunk": chunk})
+        state["analysis_output"]["summary"] = "".join(summary_parts).strip()
+        yield _evt("progress", {"stage": "deepseek", "progress_pct": 100})
     except Exception as e:
         state["error"] = str(e)
         yield _evt("error", {"message": str(e), "stage": "analyze"})

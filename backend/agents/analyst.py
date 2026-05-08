@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 from sklearn.cluster import KMeans
 
-from backend.agents.llm import deepseek_chat
+from backend.agents.llm import deepseek_chat, deepseek_chat_stream
 from backend.agents.validator import QwenValidator
 
 
@@ -14,7 +14,7 @@ class AnalystAgent:
         """Initialize with validator."""
         self.validator = QwenValidator()
 
-    def analyze(self, perception_output: dict[str, Any]) -> dict[str, Any]:
+    def analyze(self, perception_output: dict[str, Any], generate_summary: bool = True) -> dict[str, Any]:
         frame_data = perception_output["frame_data"]
 
         formations = self._detect_formations(frame_data)
@@ -25,12 +25,14 @@ class AnalystAgent:
 
         metrics = self._compute_metrics(frame_data)
 
-        tactical_summary = self._generate_tactical_analysis(
-            formations,
-            pressure_zones,
-            tactical_events,
-            metrics,
-        )
+        tactical_summary = ""
+        if generate_summary:
+            tactical_summary = self._generate_tactical_analysis(
+                formations,
+                pressure_zones,
+                tactical_events,
+                metrics,
+            )
 
         return {
             "formations": formations,
@@ -174,7 +176,7 @@ class AnalystAgent:
             "team_b_compactness": round(float(np.std(_values(all_b))), 1) if all_b else 0.0,
         }
 
-    def _generate_tactical_analysis(
+    def _build_tactical_prompt(
         self,
         formations: dict[str, list[list[int]]],
         pressure_zones: dict[str, list[list[float]]],
@@ -182,7 +184,7 @@ class AnalystAgent:
         metrics: dict[str, float],
     ) -> str:
         event_descriptions = "\n".join(event["description"] for event in events[:20]) or "No major events detected."
-        prompt = f"""
+        return f"""
 You are an elite football tactical analyst.
 
 METRICS:
@@ -211,5 +213,24 @@ Generate a tactical analysis report covering:
 
 Be specific. Reference timestamps and zones. Write like a professional scout report.
 """
+
+    def _generate_tactical_analysis(
+        self,
+        formations: dict[str, list[list[int]]],
+        pressure_zones: dict[str, list[list[float]]],
+        events: list[dict[str, Any]],
+        metrics: dict[str, float],
+    ) -> str:
+        prompt = self._build_tactical_prompt(formations, pressure_zones, events, metrics)
         return deepseek_chat([{"role": "user", "content": prompt}])
+
+    def stream_tactical_analysis(
+        self,
+        formations: dict[str, list[list[int]]],
+        pressure_zones: dict[str, list[list[float]]],
+        events: list[dict[str, Any]],
+        metrics: dict[str, float],
+    ):
+        prompt = self._build_tactical_prompt(formations, pressure_zones, events, metrics)
+        yield from deepseek_chat_stream([{"role": "user", "content": prompt}])
 

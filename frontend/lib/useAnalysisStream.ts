@@ -23,6 +23,7 @@ export interface AnalysisStreamState {
   stage: string | null
   progressPct: number
   events: TacticalEvent[]
+  summaryText: string
   isComplete: boolean
   error: string | null
 }
@@ -33,6 +34,7 @@ export function useAnalysisStream(videoFile: File | null) {
     stage: null,
     progressPct: 0,
     events: [],
+    summaryText: "",
     isComplete: false,
     error: null,
   })
@@ -47,6 +49,7 @@ export function useAnalysisStream(videoFile: File | null) {
         stage: null,
         progressPct: 0,
         events: [],
+        summaryText: "",
         isComplete: false,
         error: null,
       })
@@ -108,6 +111,12 @@ export function useAnalysisStream(videoFile: File | null) {
             setState((prev) => ({
               ...prev,
               events: [...prev.events, event],
+            }))
+          } else if (parsed.type === "summary_chunk") {
+            const chunk = String(parsed.payload.chunk ?? "")
+            setState((prev) => ({
+              ...prev,
+              summaryText: prev.summaryText + chunk,
             }))
           } else if (parsed.type === "error") {
             const message = String(parsed.payload.message ?? "Unknown error")

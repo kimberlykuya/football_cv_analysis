@@ -10,7 +10,7 @@ from ultralytics import YOLO
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark YOLO throughput on AMD MI300X")
-    parser.add_argument("--model", default="yolo11x.pt", help="Ultralytics model path")
+    parser.add_argument("--model", default="yolo26x.pt", help="Ultralytics model path")
     parser.add_argument("--iterations", type=int, default=100, help="Timing iterations per batch size")
     parser.add_argument("--warmup", type=int, default=10, help="Warmup iterations per batch size")
     parser.add_argument(
@@ -65,4 +65,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 

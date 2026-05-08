@@ -10,11 +10,11 @@ Processes raw match video through three AI agents: **Perceiver** (CV tracking), 
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **GPU** | AMD MI300X (ROCm 6.2) | Batch YOLO tracking + embeddings |
+| **GPU** | AMD MI300X (ROCm 6.2) | Batch YOLOv26 tracking + embeddings |
 | **LLM** | DeepSeek-V4-Pro via Featherless | Tactical narration + coach Q&A |
 | **Validator** | Optional Qwen via Featherless | Event validation + confidence scoring |
 | **Local VLM** | Qwen3-VL-8B-Instruct | Event-frame visual evidence for RAG |
-| **CV** | YOLO11-X + ByteTrack | Player detection & tracking |
+| **CV** | YOLOv26-X + ByteTrack | Player detection & tracking |
 | **Memory** | ChromaDB + Sentence Transformers | Cross-match patterns + per-match RAG |
 | **Orchestration** | LangGraph | Multi-agent state machine |
 | **API** | FastAPI | Backend service |
@@ -276,7 +276,7 @@ export DEEPSEEK_BASE_URL=https://api.featherless.ai/v1
 export FEATHERLESS_API_KEY=<your-featherless-key>
 export DEEPSEEK_MODEL=deepseek-ai/DeepSeek-V4-Pro
 export ALLOW_MOCK_LLM=false
-export YOLO_MODEL_PATH=yolo11x.pt
+export YOLO_MODEL_PATH=yolo26x.pt
 ```
 
 Use `deepseek-ai/DeepSeek-V4-Flash` instead when lower cost and lower latency matter more than maximum reasoning quality.
@@ -438,7 +438,7 @@ flowtrace/
 │   │   ├── visual_evidence.py        # Local VLM event-frame evidence
 │   │   └── validator.py             # Optional Qwen validation
 │   ├── pipeline/
-│   │   ├── perceiver.py             # YOLO tracking pipeline
+│   │   ├── perceiver.py             # YOLOv26 tracking pipeline
 │   │   ├── team_classifier.py       # Jersey color clustering
 │   │   ├── perspective.py           # Pitch coordinate transform
 │   │   └── video_writer.py          # Output video with annotations
@@ -497,7 +497,7 @@ flowtrace/
 - **ChromaDB persistence**: Memory stores at `./flowtrace_db/team_memory` and `./flowtrace_db/match_rag`. Auto-created on startup.
 - **Analysis registry**: Upload/status history is stored at `./flowtrace_db/analyses_registry.db`.
 - **Video uploads**: Stored in `./uploads/`. Clean up old videos to save disk space.
-- **YOLO model path**: Override detector weights with `YOLO_MODEL_PATH`; default is `yolo11x.pt`, downloaded by Ultralytics during setup.
+- **YOLO model path**: Override detector weights with `YOLO_MODEL_PATH`; default is `yolo26x.pt`, prepared during setup.
 - **YOLO tuning**: Use `YOLO_BATCH_SIZE`, `YOLO_IMGSZ`, and `YOLO_HALF` to tune MI300X throughput.
 - **Embedding tuning**: Use `EMBED_BATCH_SIZE` to raise SentenceTransformer batch size on GPU.
 - **Next dev origins**: Use `NEXT_ALLOWED_DEV_ORIGINS=<gpu-ip>,http://<gpu-ip>:3000` to debug through the public IP without HMR origin warnings.
@@ -510,7 +510,7 @@ flowtrace/
 | Metric | Value |
 |--------|-------|
 | **Video parsing** | 30 FPS on MI300X batch=16 |
-| **YOLO tracking** | 312.8 FPS on MI300X batch=16 (10× headroom above real-time) |
+| **YOLOv26 tracking** | 312.8 FPS on MI300X batch=16 (10× headroom above real-time) |
 | **Embeddings** | 64 per batch, ~100ms on MI300X |
 | **DeepSeek-V4 latency** | Provider-dependent via Featherless |
 | **End-to-end 1-min video** | ~20 sec (perceive) + ~5 sec (analyze) + ~3 sec (memory) = ~28 sec total |
@@ -523,7 +523,7 @@ flowtrace/
 |-------|----------|
 | `ModuleNotFoundError: No module named 'langgraph'` | Run `python -m pip install -r backend/requirements.txt` |
 | `ChromaDB permission error` | `mkdir -p ./flowtrace_db/team_memory ./flowtrace_db/match_rag` |
-| `YOLO model download hangs` | Pre-download: `python -c "from ultralytics import YOLO; YOLO('yolo11x.pt')"` |
+| `YOLOv26 model download hangs` | Pre-download: `python -c "from ultralytics import YOLO; YOLO('yolo26x.pt')"` |
 | `DeepSeek-V4 auth/API error` | Check `FEATHERLESS_API_KEY`, `DEEPSEEK_BASE_URL=https://api.featherless.ai/v1`, and model access |
 | `Qwen validation fails` | Set `QWEN_VALIDATION_ENABLED=false` or verify `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL` |
 | `VLM model load fails` | Keep `VLM_ENABLED=false`, verify `transformers`, `accelerate`, `qwen-vl-utils`, ROCm PyTorch, and available VRAM |
@@ -547,7 +547,7 @@ watch -n 1 rocm-smi
 Run YOLO batch throughput checks:
 
 ```bash
-python backend/benchmark.py --model yolo11x.pt --batch-sizes 16,32,64,128
+python backend/benchmark.py --model yolo26x.pt --batch-sizes 16,32,64,128
 ```
 
 Confirm required packages:

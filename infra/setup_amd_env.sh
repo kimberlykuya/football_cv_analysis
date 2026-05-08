@@ -12,7 +12,7 @@ INSTALL_NODE="${INSTALL_NODE:-true}"
 INSTALL_ROCM_TORCH="${INSTALL_ROCM_TORCH:-true}"
 VLM_IMAGE_DIR="${VLM_IMAGE_DIR:-./uploads/vlm_frames}"
 VLM_MODEL="${VLM_MODEL:-Qwen/Qwen3-VL-8B-Instruct}"
-YOLO_MODEL_PATH="${YOLO_MODEL_PATH:-yolo11x.pt}"
+YOLO_MODEL_PATH="${YOLO_MODEL_PATH:-yolo26x.pt}"
 EMBED_MODEL="${EMBED_MODEL:-sentence-transformers/all-MiniLM-L6-v2}"
 HF_HOME="${HF_HOME:-$ROOT_DIR/.hf_cache}"
 
@@ -166,10 +166,20 @@ hf download "$EMBED_MODEL" --type model --cache-dir "$HF_HOME"
 echo "Downloading YOLO detector model: $YOLO_MODEL_PATH"
 YOLO_MODEL_PATH="$YOLO_MODEL_PATH" python - <<'PY'
 import os
+from pathlib import Path
+
 from ultralytics import YOLO
 
 model_path = os.environ["YOLO_MODEL_PATH"]
-model = YOLO(model_path)
+try:
+    model = YOLO(model_path)
+except Exception as error:
+    if model_path == "yolo26x.pt" and not Path(model_path).exists():
+        raise SystemExit(
+            "Could not load yolo26x.pt. Keep YOLO_MODEL_PATH=yolo26x.pt and place "
+            "the YOLOv26-X weights at the repo root before rerunning setup."
+        ) from error
+    raise
 print(f"yolo_model_ready={model_path}")
 PY
 
@@ -223,3 +233,4 @@ echo "  bash infra/start_backend.sh"
 echo "  bash infra/start_frontend_prod.sh"
 echo "  # In a second shell after the frontend is running:"
 echo "  VLM_ENABLED=true BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh"
+
