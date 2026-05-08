@@ -4,6 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [ -f ".env.amd.local" ]; then
+  # shellcheck disable=SC1091
+  set -a && source .env.amd.local && set +a
+elif [ -f ".env.amd.example" ]; then
+  # shellcheck disable=SC1091
+  set -a && source .env.amd.example && set +a
+fi
+
 BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8001}"
 FRONTEND_URL="${FRONTEND_URL:-http://127.0.0.1:3000}"
 

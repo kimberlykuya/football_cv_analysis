@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+LOCAL_ENV_FILE=".env.amd.local"
+
 PYTHON_BIN="${PYTHON_BIN:-}"
 ROCM_TORCH_INDEX="${ROCM_TORCH_INDEX:-https://download.pytorch.org/whl/rocm7.0}"
 INSTALL_NODE="${INSTALL_NODE:-true}"
@@ -14,6 +16,57 @@ HF_HOME="${HF_HOME:-$ROOT_DIR/.hf_cache}"
 
 echo "Normalizing shell script line endings..."
 sed -i 's/\r$//' infra/*.sh
+
+if [ -f ".env.amd.example" ] && [ ! -f "$LOCAL_ENV_FILE" ]; then
+  cp .env.amd.example "$LOCAL_ENV_FILE"
+fi
+
+if [ -f "$LOCAL_ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  set -a && source "$LOCAL_ENV_FILE" && set +a
+fi
+
+prompt_if_empty() {
+  local var_name="$1"
+  local prompt="$2"
+  local current_value="${!var_name:-}"
+  if [ -z "$current_value" ] && [ -t 0 ]; then
+    read -r -p "$prompt" current_value
+    export "$var_name=$current_value"
+  fi
+}
+
+write_env_value() {
+  local key="$1"
+  local value="${!key:-}"
+  local escaped
+  escaped="$(printf '%s' "$value" | sed 's/[\/&]/\\&/g')"
+  if grep -q "^${key}=" "$LOCAL_ENV_FILE"; then
+    sed -i "s/^${key}=.*/${key}=\"${escaped}\"/" "$LOCAL_ENV_FILE"
+  else
+    printf '%s="%s"\n' "$key" "$value" >> "$LOCAL_ENV_FILE"
+  fi
+}
+
+echo "Configuring persistent AMD environment in $LOCAL_ENV_FILE ..."
+prompt_if_empty "FEATHERLESS_API_KEY" "Featherless API key (press Enter to leave blank for setup only): "
+prompt_if_empty "HF_TOKEN" "Hugging Face token (press Enter if public download works without it): "
+prompt_if_empty "PUBLIC_IP" "Public GPU IP or hostname for frontend access (press Enter to skip): "
+
+if [ -n "${PUBLIC_IP:-}" ]; then
+  NEXT_ALLOWED_DEV_ORIGINS="${NEXT_ALLOWED_DEV_ORIGINS:-$PUBLIC_IP,http://$PUBLIC_IP:3000}"
+  export NEXT_ALLOWED_DEV_ORIGINS
+fi
+
+VLM_ENABLED="${VLM_ENABLED:-true}"
+BACKEND_URL="${BACKEND_URL:-http://127.0.0.1:8001}"
+BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
+BACKEND_PORT="${BACKEND_PORT:-8001}"
+export VLM_ENABLED BACKEND_URL BACKEND_HOST BACKEND_PORT
+
+for key in FEATHERLESS_API_KEY HF_TOKEN PUBLIC_IP NEXT_ALLOWED_DEV_ORIGINS VLM_ENABLED VLM_MODEL VLM_DEVICE VLM_DTYPE VLM_IMAGE_DIR HF_HOME BACKEND_URL BACKEND_HOST BACKEND_PORT; do
+  write_env_value "$key"
+done
 
 if [ -z "$PYTHON_BIN" ]; then
   for candidate in python3.12 python3.11 python3.10 python3 python; do
@@ -152,7 +205,6 @@ echo "  MATCH_RAG_DIR=./flowtrace_db/match_rag"
 echo "  TEAM_MEMORY_DIR=./flowtrace_db/team_memory"
 echo "Next:"
 echo "  source .venv/bin/activate"
-echo "  set -a && source .env.amd.example && set +a"
 echo "  bash infra/amd_setup.sh"
 echo "  python backend/test_backend.py"
 echo "  python -m pytest -q backend/test_rag_evidence.py"

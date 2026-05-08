@@ -21,6 +21,7 @@ flowtrace_db/
 .env*
 !.env.example
 !.env.amd.example
+.env.amd.local
 frontend/next-dev.err
 
 yolo26x.pt

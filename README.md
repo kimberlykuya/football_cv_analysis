@@ -359,13 +359,7 @@ PYTHON_BIN=/path/to/python bash infra/setup_amd_env.sh
 
 Setup downloads Qwen3-VL from Hugging Face with `hf download` and verifies local model load.
 
-Runtime configuration lives in `.env.amd.example`:
-
-```bash
-set -a && source .env.amd.example && set +a
-```
-
-Fill in `FEATHERLESS_API_KEY` with a rotated key and replace `<gpu-public-ip>` in `NEXT_ALLOWED_DEV_ORIGINS`.
+Runtime configuration is generated once into `.env.amd.local`. On first setup, `infra/setup_amd_env.sh` prompts for the Featherless key, Hugging Face token, and public GPU IP, then all startup scripts load `.env.amd.local` automatically. You do not need to source env files manually after that.
 
 `yolo26x.pt` and real demo videos are intentionally not stored in normal Git. Copy them separately:
 
@@ -417,13 +411,12 @@ If `cuda_available=False`, PyTorch is CPU-only and the MI300X is not being used 
 2. Clone repo: `git clone <your-repo>`
 3. Copy `yolo26x.pt` and a real demo clip separately if they are not in Git
 4. Run setup: `bash infra/setup_amd_env.sh`
-5. Load env: `set -a && source .env.amd.example && set +a`
-6. Run checks: `bash infra/amd_setup.sh && python backend/test_backend.py`
+5. Run checks: `bash infra/amd_setup.sh && python backend/test_backend.py`
 7. Create or copy `test_video.mp4`; then run `python backend/test_pipeline.py`
 8. Start backend: `bash infra/start_backend.sh`
-9. Start frontend dev: `PUBLIC_IP=<gpu-ip> bash infra/start_frontend_dev.sh`
+9. Start frontend dev: `bash infra/start_frontend_dev.sh`
 10. Or start frontend prod: `bash infra/start_frontend_prod.sh`
-11. In a second shell, verify services: `BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh`
+11. In a second shell, verify services: `bash infra/smoke_check.sh`
 12. Access on instance IP:3000
 
 For VLM verification, load env with `VLM_ENABLED=true` before running `infra/smoke_check.sh`; the smoke check will instantiate the local VLM model.
