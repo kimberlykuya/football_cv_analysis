@@ -34,7 +34,19 @@ echo "Using Python interpreter: $PYTHON_BIN"
 
 echo "Creating/using Python virtualenv..."
 if [ ! -d ".venv" ]; then
-  "$PYTHON_BIN" -m venv .venv
+  if ! "$PYTHON_BIN" -m venv .venv; then
+    echo "Python venv creation failed. Attempting to install the matching venv package..."
+    PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    if command -v apt-get >/dev/null 2>&1; then
+      apt-get update
+      apt-get install -y "python${PY_VERSION}-venv" python3-venv
+      "$PYTHON_BIN" -m venv .venv
+    else
+      echo "ERROR: Could not create .venv and apt-get is not available."
+      echo "Install the Python venv package for $PYTHON_BIN, then rerun setup."
+      exit 1
+    fi
+  fi
 fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
