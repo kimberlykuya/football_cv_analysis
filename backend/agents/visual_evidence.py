@@ -11,7 +11,7 @@ from typing import Any
 import cv2
 
 
-DEFAULT_VLM_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+DEFAULT_VLM_MODEL = "Qwen/Qwen3-VL-8B-Instruct"
 DEFAULT_IMAGE_DIR = "./uploads/vlm_frames"
 
 
@@ -48,7 +48,7 @@ class EventFrame:
 class LocalQwenVLM:
     def __init__(self) -> None:
         import torch
-        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+        from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
         model_name = os.getenv("VLM_MODEL", DEFAULT_VLM_MODEL)
         device = os.getenv("VLM_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
@@ -57,17 +57,15 @@ class LocalQwenVLM:
 
         self.device = device
         self.processor = AutoProcessor.from_pretrained(model_name)
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        self.model = Qwen3VLForConditionalGeneration.from_pretrained(
             model_name,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map="auto" if device == "cuda" else None,
         )
         if device != "cuda":
             self.model.to(device)
 
     def describe(self, image_path: str, event: dict[str, Any]) -> dict[str, Any]:
-        from qwen_vl_utils import process_vision_info
-
         prompt = f"""
 You are analyzing one football match frame near a detected tactical event.
 Return strict JSON only with these keys:
@@ -85,19 +83,14 @@ Detected event:
                 ],
             }
         ]
-        text = self.processor.apply_chat_template(
+        inputs = self.processor.apply_chat_template(
             messages,
-            tokenize=False,
+            tokenize=True,
             add_generation_prompt=True,
-        )
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = self.processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
+            return_dict=True,
             return_tensors="pt",
         )
+        inputs.pop("token_type_ids", None)
         inputs = inputs.to(self.model.device)
         generated_ids = self.model.generate(
             **inputs,

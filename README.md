@@ -13,7 +13,7 @@ Processes raw match video through three AI agents: **Perceiver** (CV tracking), 
 | **GPU** | AMD MI300X (ROCm 6.2) | Batch YOLOv26 tracking + embeddings |
 | **LLM** | DeepSeek-V4-Pro via Featherless | Tactical narration + coach Q&A |
 | **Validator** | Optional Qwen via Featherless | Event validation + confidence scoring |
-| **Local VLM** | Qwen2.5-VL-7B-Instruct | Event-frame visual evidence for RAG |
+| **Local VLM** | Qwen3-VL-8B-Instruct | Event-frame visual evidence for RAG |
 | **CV** | YOLOv26-X + ByteTrack | Player detection & tracking |
 | **Memory** | ChromaDB + Sentence Transformers | Cross-match patterns + per-match RAG |
 | **Orchestration** | LangGraph | Multi-agent state machine |
@@ -81,7 +81,7 @@ Batch 16: 312.8 frames/sec  (7.4x faster) ← Production target
 4. **Optional local VLM evidence**:
    ```bash
    export VLM_ENABLED=true
-   export VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+   export VLM_MODEL=Qwen/Qwen3-VL-8B-Instruct
    export VLM_DEVICE=cuda
    export VLM_DTYPE=bfloat16
    ```
@@ -294,12 +294,12 @@ If Qwen validation is disabled, the backend still adds deterministic heuristic c
 
 ## Optional Local VLM Evidence
 
-Set `VLM_ENABLED=true` to enrich RAG with local event-frame visual evidence using Qwen2.5-VL-7B-Instruct:
+Set `VLM_ENABLED=true` to enrich RAG with local event-frame visual evidence using Qwen3-VL-8B-Instruct:
 
 ```bash
 export VLM_ENABLED=true
 export ALLOW_VLM_FALLBACK=true
-export VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+export VLM_MODEL=Qwen/Qwen3-VL-8B-Instruct
 export VLM_DEVICE=cuda
 export VLM_DTYPE=bfloat16
 export VLM_MAX_EVENT_FRAMES=40
@@ -351,11 +351,7 @@ bash infra/setup_amd_env.sh
 
 The script creates `.venv`, installs backend requirements including local VLM dependencies, installs ROCm PyTorch, verifies GPU runtime, installs Node 20+ when needed, installs frontend dependencies, and checks for local assets.
 
-By default setup verifies VLM imports but does not download/load Qwen2.5-VL. To force a full local VLM model load during setup:
-
-```bash
-VLM_PRELOAD=true VLM_ENABLED=true bash infra/setup_amd_env.sh
-```
+Setup downloads Qwen3-VL from Hugging Face with `hf download` and verifies local model load.
 
 Runtime configuration lives in `.env.amd.example`:
 
@@ -498,7 +494,7 @@ flowtrace/
 - **Mock LLM fallback**: If DeepSeek-V4 is unavailable and `ALLOW_MOCK_LLM=true`, `llm.py` returns mock responses automatically.
 - **LLM strict mode**: Set `ALLOW_MOCK_LLM=false` in deployment to fail fast on Featherless/API issues.
 - **Qwen validation**: Set `QWEN_VALIDATION_ENABLED=true` only when `QWEN_*` credentials/model access are confirmed. Default `false` keeps analysis fast and uses heuristic confidence scoring.
-- **Local VLM evidence**: Set `VLM_ENABLED=true` only on GPU instances with enough VRAM for Qwen2.5-VL-7B-Instruct. Default `false` preserves the text-only RAG path.
+- **Local VLM evidence**: AMD setup uses `VLM_ENABLED=true` with `Qwen/Qwen3-VL-8B-Instruct` and downloads the model through Hugging Face CLI.
 - **GPU strict mode**: Set `ALLOW_CPU_FALLBACK=false` in deployment to fail fast when ROCm PyTorch is not active.
 - **ChromaDB persistence**: Memory stores at `./flowtrace_db/team_memory` and `./flowtrace_db/match_rag`. Auto-created on startup.
 - **Analysis registry**: Upload/status history is stored at `./flowtrace_db/analyses_registry.db`.
