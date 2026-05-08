@@ -8,6 +8,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3.11}"
 ROCM_TORCH_INDEX="${ROCM_TORCH_INDEX:-https://download.pytorch.org/whl/rocm7.0}"
 INSTALL_NODE="${INSTALL_NODE:-true}"
 INSTALL_ROCM_TORCH="${INSTALL_ROCM_TORCH:-true}"
+VLM_IMAGE_DIR="${VLM_IMAGE_DIR:-./uploads/vlm_frames}"
+VLM_PRELOAD="${VLM_PRELOAD:-false}"
 
 echo "Normalizing shell script line endings..."
 sed -i 's/\r$//' infra/*.sh
@@ -39,6 +41,46 @@ fi
 echo "Checking PyTorch GPU runtime..."
 python infra/check_gpu_runtime.py
 
+echo "Preparing runtime directories..."
+mkdir -p uploads "$VLM_IMAGE_DIR" flowtrace_db/team_memory flowtrace_db/match_rag
+
+echo "Checking VLM/RAG dependency imports..."
+python - <<'PY'
+import importlib
+
+required = [
+    "chromadb",
+    "sentence_transformers",
+    "transformers",
+    "accelerate",
+    "qwen_vl_utils",
+    "PIL",
+]
+
+missing = []
+for module in required:
+    try:
+        importlib.import_module(module)
+    except Exception as error:
+        missing.append(f"{module}: {error}")
+
+if missing:
+    raise SystemExit("Missing VLM/RAG dependencies:\n" + "\n".join(missing))
+
+print("VLM/RAG imports OK")
+PY
+
+if [ "$VLM_PRELOAD" = "true" ]; then
+  echo "Preloading local VLM model. This can take several minutes and requires GPU memory..."
+  VLM_ENABLED=true python - <<'PY'
+from backend.agents.visual_evidence import get_local_vlm
+vlm = get_local_vlm()
+print(f"vlm_device={vlm.device}")
+PY
+else
+  echo "Skipping local VLM preload. Set VLM_PRELOAD=true to verify model download/load during setup."
+fi
+
 echo "Checking required local assets..."
 if [ ! -f "yolo26x.pt" ]; then
   echo "WARN: yolo26x.pt is missing."
@@ -69,9 +111,23 @@ if [ "$INSTALL_NODE" = "true" ]; then
 fi
 
 echo "AMD setup complete."
+echo "Configured runtime defaults:"
+echo "  VLM_ENABLED=${VLM_ENABLED:-false}"
+echo "  VLM_MODEL=${VLM_MODEL:-Qwen/Qwen2.5-VL-7B-Instruct}"
+echo "  VLM_IMAGE_DIR=$VLM_IMAGE_DIR"
+echo "  QWEN_VALIDATION_ENABLED=${QWEN_VALIDATION_ENABLED:-false}"
+echo "  MATCH_RAG_DIR=./flowtrace_db/match_rag"
+echo "  TEAM_MEMORY_DIR=./flowtrace_db/team_memory"
 echo "Next:"
 echo "  source .venv/bin/activate"
 echo "  set -a && source .env.amd.example && set +a"
 echo "  bash infra/amd_setup.sh"
 echo "  python backend/test_backend.py"
+echo "  python -m pytest -q backend/test_rag_evidence.py"
 echo "  python backend/test_pipeline.py"
+echo "  bash infra/start_backend.sh"
+echo "  bash infra/start_frontend_prod.sh"
+echo "  # In a second shell after the frontend is running:"
+echo "  BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh"
+echo "  # Optional full local VLM load check:"
+echo "  VLM_ENABLED=true BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh"

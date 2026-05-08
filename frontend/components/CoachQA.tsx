@@ -81,6 +81,24 @@ export default function CoachQA({ matchId, onJumpTo, onTimestampsChange }: Coach
               ))}
             </div>
           ) : null}
+          {response.evidence_cards?.length ? (
+            <div className="evidence-card-list">
+              {response.evidence_cards.map((card, index) => (
+                <button
+                  key={`${card.type}-${card.timestamp}-${index}`}
+                  type="button"
+                  className="evidence-card"
+                  onClick={() => onJumpTo?.(card.timestamp)}
+                >
+                  <span className="evidence-card-meta">
+                    {card.timestamp.toFixed(1)}s · {card.type} · {Math.round(card.confidence)}%
+                  </span>
+                  <strong>{card.title}</strong>
+                  <span>{card.excerpt}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

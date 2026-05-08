@@ -16,6 +16,17 @@ export interface CoachQAResponse {
   answer: string
   cited_timestamps: number[]
   evidence_count: number
+  evidence_cards?: EvidenceCard[]
+}
+
+export interface EvidenceCard {
+  timestamp: number
+  type: string
+  title: string
+  excerpt: string
+  confidence: number
+  frame_id: string
+  source_image_path?: string
 }
 
 export interface TeamProfileResponse {

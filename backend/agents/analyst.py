@@ -6,15 +6,23 @@ import numpy as np
 from sklearn.cluster import KMeans
 
 from backend.agents.llm import deepseek_chat
+from backend.agents.validator import QwenValidator
 
 
 class AnalystAgent:
+    def __init__(self):
+        """Initialize with validator."""
+        self.validator = QwenValidator()
+
     def analyze(self, perception_output: dict[str, Any]) -> dict[str, Any]:
         frame_data = perception_output["frame_data"]
 
         formations = self._detect_formations(frame_data)
         pressure_zones = self._compute_pressure_zones(frame_data)
         tactical_events = self._detect_events(frame_data)
+        tactical_events = self.validator.validate_and_score_events(tactical_events, frame_data)
+        tactical_events = self.validator.add_new_event_types(tactical_events)
+
         metrics = self._compute_metrics(frame_data)
 
         tactical_summary = self._generate_tactical_analysis(

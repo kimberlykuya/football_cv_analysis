@@ -2,7 +2,7 @@
 
 Multi-agent soccer match analysis system powered by **AMD MI300X + DeepSeek-V4-Pro + LangGraph + ChromaDB**.
 
-Processes raw match video through three AI agents: **Perceiver** (CV tracking), **Analyst** (tactical metrics), and **QA** (evidence-grounded Q&A), delivering real-time coach insights and cross-match pattern detection.
+Processes raw match video through three AI agents: **Perceiver** (CV tracking), **Analyst** (tactical metrics), and **QA** (evidence-grounded Q&A), delivering streaming coach insights, analysis history, GPU telemetry, and cross-match pattern detection.
 
 ---
 
@@ -12,6 +12,8 @@ Processes raw match video through three AI agents: **Perceiver** (CV tracking), 
 |-----------|-----------|---------|
 | **GPU** | AMD MI300X (ROCm 6.2) | Batch YOLOv26 tracking + embeddings |
 | **LLM** | DeepSeek-V4-Pro via Featherless | Tactical narration + coach Q&A |
+| **Validator** | Optional Qwen via Featherless | Event validation + confidence scoring |
+| **Local VLM** | Qwen2.5-VL-7B-Instruct | Event-frame visual evidence for RAG |
 | **CV** | YOLOv26-X + ByteTrack | Player detection & tracking |
 | **Memory** | ChromaDB + Sentence Transformers | Cross-match patterns + per-match RAG |
 | **Orchestration** | LangGraph | Multi-agent state machine |
@@ -67,6 +69,24 @@ Batch 16: 312.8 frames/sec  (7.4x faster) ← Production target
    ```
    Server runs on `http://localhost:8001`
 
+3. **Optional Qwen validation**:
+   ```bash
+   export QWEN_VALIDATION_ENABLED=true
+   export QWEN_BASE_URL=https://api.featherless.ai/v1
+   export QWEN_MODEL=Qwen/Qwen3-235B-A22B
+   export QWEN_API_KEY=$FEATHERLESS_API_KEY
+   ```
+   Leave `QWEN_VALIDATION_ENABLED=false` for faster, heuristic confidence scoring.
+
+4. **Optional local VLM evidence**:
+   ```bash
+   export VLM_ENABLED=true
+   export VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+   export VLM_DEVICE=cuda
+   export VLM_DTYPE=bfloat16
+   ```
+   Leave `VLM_ENABLED=false` to keep the current text-only RAG path.
+
 ### Frontend Setup
 
 1. **Install dependencies**:
@@ -91,10 +111,9 @@ Batch 16: 312.8 frames/sec  (7.4x faster) ← Production target
 If FastAPI is on `localhost:8001` and `FEATHERLESS_API_KEY` is configured:
 
 1. Upload a match video (~30 seconds recommended)
-2. Enter team ID (e.g., "manchester-city")
-3. Click "Analyze"
-4. View tactical report (formations, pressure zones, events)
-5. Ask coach questions → Get answers + timestamp links to video evidence
+2. Click "Analyze"
+3. View tactical report (formations, pressure zones, events)
+4. Ask coach questions → Get answers + timestamp links to video evidence
 
 ---
 
@@ -106,10 +125,10 @@ Upload video and trigger full pipeline (perceiver → analyst → memory → RAG
 **Request**:
 ```bash
 curl -X POST http://localhost:8001/api/analyze \
-  -F "video=@match.mp4" \
-  -F "team_id=manchester-city" \
-  -F "match_label=vs-arsenal-20240301"
+  -F "video=@match.mp4"
 ```
+
+`team_id` and `match_label` are optional. The demo UI omits them and the backend defaults to `team_id=demo-team` and the uploaded filename as the match label.
 
 **Response**:
 ```json
@@ -135,8 +154,57 @@ curl -X POST http://localhost:8001/api/analyze \
 
 ---
 
+### POST `/api/analyze/stream`
+Upload video and stream progress/events over Server-Sent Events. The frontend uses this endpoint by default.
+
+Every SSE message uses the same envelope:
+
+```json
+{
+  "type": "progress",
+  "ts": 1778248000.0,
+  "analysis_id": "abc12345",
+  "payload": {
+    "stage": "perceive",
+    "progress_pct": 100
+  }
+}
+```
+
+Event types currently emitted:
+
+- `progress` - pipeline stage progress
+- `tactical_event` - event marker ready for feed/timeline
+- `complete` - final `AnalyzeResponse` payload
+- `error` - terminal failure payload
+
+---
+
+### GET `/api/analyses`
+List analysis registry rows for the history page.
+
+```bash
+curl http://localhost:8001/api/analyses
+```
+
+### GET `/api/gpu/status`
+Return current GPU telemetry for the dashboard.
+
+```bash
+curl http://localhost:8001/api/gpu/status
+```
+
+### GET `/api/gpu/history`
+Return recent GPU samples from the in-process ring buffer.
+
+```bash
+curl http://localhost:8001/api/gpu/history?limit=60
+```
+
+---
+
 ### POST `/api/coach-qa`
-Ask tactical questions about a match; get answers with cited timestamps.
+Ask tactical questions about a match; get answers with cited timestamps and evidence cards.
 
 **Request**:
 ```bash
@@ -153,7 +221,18 @@ curl -X POST http://localhost:8001/api/coach-qa \
 {
   "answer": "The opponent's vulnerability lies in their left flank during transitions. At [12.4s], [45.8s], and [73.2s], they showed gaps when pressing high without midfield cover. Recommendation: exploit these spaces with direct wing play and quick counter-attacks to their left side.",
   "cited_timestamps": [12.4, 45.8, 73.2, 89.1],
-  "evidence_count": 12
+  "evidence_count": 12,
+  "evidence_cards": [
+    {
+      "timestamp": 45.8,
+      "type": "visual",
+      "title": "Visual evidence",
+      "excerpt": "Visual evidence shows the defensive line stretched with central pressure.",
+      "confidence": 82,
+      "frame_id": "1374",
+      "source_image_path": "./uploads/vlm_frames/abc12345/frame_1374.jpg"
+    }
+  ]
 }
 ```
 
@@ -202,6 +281,33 @@ export YOLO_MODEL_PATH=yolo26x.pt
 
 Use `deepseek-ai/DeepSeek-V4-Flash` instead when lower cost and lower latency matter more than maximum reasoning quality.
 
+Optional Qwen validation uses the same OpenAI-compatible provider by default:
+
+```bash
+export QWEN_VALIDATION_ENABLED=true
+export QWEN_BASE_URL=https://api.featherless.ai/v1
+export QWEN_API_KEY=$FEATHERLESS_API_KEY
+export QWEN_MODEL=Qwen/Qwen3-235B-A22B
+```
+
+If Qwen validation is disabled, the backend still adds deterministic heuristic confidence scores. If it is enabled and the Qwen call fails, validation logs a warning and falls back to heuristics so the analysis pipeline continues.
+
+## Optional Local VLM Evidence
+
+Set `VLM_ENABLED=true` to enrich RAG with local event-frame visual evidence using Qwen2.5-VL-7B-Instruct:
+
+```bash
+export VLM_ENABLED=true
+export ALLOW_VLM_FALLBACK=true
+export VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+export VLM_DEVICE=cuda
+export VLM_DTYPE=bfloat16
+export VLM_MAX_EVENT_FRAMES=40
+export VLM_IMAGE_DIR=./uploads/vlm_frames
+```
+
+The VLM does not replace YOLO/ByteTrack. It runs after tactical event detection, samples only event frames, writes JPEG artifacts under `VLM_IMAGE_DIR`, and indexes structured visual evidence into MatchRAG. Set `ALLOW_VLM_FALLBACK=false` only when you want analysis to fail if local VLM inference fails.
+
 ## Optional Local DeepSeek-V4 Serving (MI300X)
 
 ### Option 1: vLLM (Recommended)
@@ -243,7 +349,13 @@ sed -i 's/\r$//' infra/*.sh
 bash infra/setup_amd_env.sh
 ```
 
-The script creates `.venv`, installs backend requirements, installs ROCm PyTorch, verifies GPU runtime, installs Node 20+ when needed, installs frontend dependencies, and checks for local assets.
+The script creates `.venv`, installs backend requirements including local VLM dependencies, installs ROCm PyTorch, verifies GPU runtime, installs Node 20+ when needed, installs frontend dependencies, and checks for local assets.
+
+By default setup verifies VLM imports but does not download/load Qwen2.5-VL. To force a full local VLM model load during setup:
+
+```bash
+VLM_PRELOAD=true VLM_ENABLED=true bash infra/setup_amd_env.sh
+```
 
 Runtime configuration lives in `.env.amd.example`:
 
@@ -304,11 +416,15 @@ If `cuda_available=False`, PyTorch is CPU-only and the MI300X is not being used 
 3. Copy `yolo26x.pt` and a real demo clip separately if they are not in Git
 4. Run setup: `bash infra/setup_amd_env.sh`
 5. Load env: `set -a && source .env.amd.example && set +a`
-6. Run checks: `bash infra/amd_setup.sh && python backend/test_backend.py && python backend/test_pipeline.py`
-7. Start backend: `bash infra/start_backend.sh`
-8. Start frontend dev: `PUBLIC_IP=<gpu-ip> bash infra/start_frontend_dev.sh`
-9. Start frontend prod: `bash infra/start_frontend_prod.sh`
-10. Access on instance IP:3000
+6. Run checks: `bash infra/amd_setup.sh && python backend/test_backend.py`
+7. Create or copy `test_video.mp4`; then run `python backend/test_pipeline.py`
+8. Start backend: `bash infra/start_backend.sh`
+9. Start frontend dev: `PUBLIC_IP=<gpu-ip> bash infra/start_frontend_dev.sh`
+10. Or start frontend prod: `bash infra/start_frontend_prod.sh`
+11. In a second shell, verify services: `BACKEND_URL=http://127.0.0.1:8001 FRONTEND_URL=http://127.0.0.1:3000 bash infra/smoke_check.sh`
+12. Access on instance IP:3000
+
+For VLM verification, load env with `VLM_ENABLED=true` before running `infra/smoke_check.sh`; the smoke check will instantiate the local VLM model.
 
 See `.env.production` template for all required variables.
 
@@ -320,9 +436,13 @@ See `.env.production` template for all required variables.
 flowtrace/
 ├── backend/
 │   ├── api/main.py                  # FastAPI endpoints
+│   ├── api/registry.py              # SQLite analysis registry
+│   ├── api/gpu_monitor.py           # GPU telemetry endpoints
 │   ├── agents/
 │   │   ├── llm.py                   # DeepSeek-V4 client (with fallback)
-│   │   └── analyst.py               # Tactical analysis agent
+│   │   ├── analyst.py               # Tactical analysis agent
+│   │   ├── visual_evidence.py        # Local VLM event-frame evidence
+│   │   └── validator.py             # Optional Qwen validation
 │   ├── pipeline/
 │   │   ├── perceiver.py             # YOLOv26 tracking pipeline
 │   │   ├── team_classifier.py       # Jersey color clustering
@@ -337,12 +457,20 @@ flowtrace/
 ├── frontend/
 │   ├── app/
 │   │   ├── page.tsx                 # Main dashboard
+│   │   ├── analyses/page.tsx        # Analysis history
 │   │   ├── team/[teamId]/page.tsx   # Team profile
 │   │   └── api/
 │   │       ├── analyze/route.ts     # Backend proxy
+│   │       ├── analyze/stream/route.ts # SSE backend proxy
+│   │       ├── analyses/route.ts    # Registry proxy
+│   │       ├── gpu/status/route.ts  # GPU status proxy
 │   │       └── coach-qa/route.ts    # Q&A proxy
 │   ├── components/
 │   │   ├── VideoPlayer.tsx
+│   │   ├── EventTimeline.tsx
+│   │   ├── EventFeed.tsx
+│   │   ├── GPUMonitor.tsx
+│   │   ├── NavBar.tsx
 │   │   ├── CoachQA.tsx
 │   │   ├── TacticalReport.tsx
 │   │   └── TeamProfile.tsx
@@ -355,9 +483,10 @@ flowtrace/
 │   ├── start_backend.sh              # Background FastAPI launcher
 │   ├── start_frontend_dev.sh         # Next.js dev launcher
 │   ├── start_frontend_prod.sh        # Next.js production launcher
-│   ├── start_vllm.sh                # vLLM startup
-│   └── start_sglang.sh              # SGLang startup
-│   ├── benchmark.py                  # Throughput benchmark
+│   ├── smoke_check.sh                # Fresh instance service checks
+│   ├── start_vllm.sh                 # vLLM startup
+│   └── start_sglang.sh               # SGLang startup
+├── backend/benchmark.py              # Throughput benchmark
 ├── benchmark_results.txt            # Published benchmark data
 └── README.md                        # This file
 ```
@@ -368,8 +497,11 @@ flowtrace/
 
 - **Mock LLM fallback**: If DeepSeek-V4 is unavailable and `ALLOW_MOCK_LLM=true`, `llm.py` returns mock responses automatically.
 - **LLM strict mode**: Set `ALLOW_MOCK_LLM=false` in deployment to fail fast on Featherless/API issues.
+- **Qwen validation**: Set `QWEN_VALIDATION_ENABLED=true` only when `QWEN_*` credentials/model access are confirmed. Default `false` keeps analysis fast and uses heuristic confidence scoring.
+- **Local VLM evidence**: Set `VLM_ENABLED=true` only on GPU instances with enough VRAM for Qwen2.5-VL-7B-Instruct. Default `false` preserves the text-only RAG path.
 - **GPU strict mode**: Set `ALLOW_CPU_FALLBACK=false` in deployment to fail fast when ROCm PyTorch is not active.
 - **ChromaDB persistence**: Memory stores at `./flowtrace_db/team_memory` and `./flowtrace_db/match_rag`. Auto-created on startup.
+- **Analysis registry**: Upload/status history is stored at `./flowtrace_db/analyses_registry.db`.
 - **Video uploads**: Stored in `./uploads/`. Clean up old videos to save disk space.
 - **YOLO model path**: Override detector weights with `YOLO_MODEL_PATH`; default is `yolo26x.pt` resolved from repo root.
 - **YOLO tuning**: Use `YOLO_BATCH_SIZE`, `YOLO_IMGSZ`, and `YOLO_HALF` to tune MI300X throughput.
@@ -399,7 +531,12 @@ flowtrace/
 | `ChromaDB permission error` | `mkdir -p ./flowtrace_db/team_memory ./flowtrace_db/match_rag` |
 | `YOLOv26 model download hangs` | Pre-download: `python -c "from ultralytics import YOLO; YOLO('yolo26x.pt')"` |
 | `DeepSeek-V4 auth/API error` | Check `FEATHERLESS_API_KEY`, `DEEPSEEK_BASE_URL=https://api.featherless.ai/v1`, and model access |
+| `Qwen validation fails` | Set `QWEN_VALIDATION_ENABLED=false` or verify `QWEN_API_KEY`, `QWEN_BASE_URL`, and `QWEN_MODEL` |
+| `VLM model load fails` | Keep `VLM_ENABLED=false`, verify `transformers`, `accelerate`, `qwen-vl-utils`, ROCm PyTorch, and available VRAM |
+| `VLM evidence missing` | Confirm tactical events were detected and `VLM_IMAGE_DIR` is writable |
 | `Frontend build fails (Node.js)` | Ensure Node ≥20.9: `node --version`; try `npm cache clean --force && npm install` |
+| `History page is empty` | Confirm backend is using the same working directory and `./flowtrace_db/analyses_registry.db` is writable |
+| `GPU dashboard shows CPU` | Confirm `python infra/check_gpu_runtime.py` reports `cuda_available=True`; on ROCm, PyTorch still exposes GPUs through `torch.cuda` |
 | `Next dev HMR origin warning` | Run `PUBLIC_IP=<gpu-ip> bash infra/start_frontend_dev.sh` or set `NEXT_ALLOWED_DEV_ORIGINS` |
 | `torch.cuda.is_available() is false` | Reinstall ROCm PyTorch in `.venv`; rerun `python infra/check_gpu_runtime.py` |
 | `infra/*.sh set: pipefail invalid option` | Run `sed -i 's/\r$//' infra/*.sh` |

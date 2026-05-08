@@ -29,7 +29,7 @@ class TacticalMemory:
                 "team_id": team_id,
                 "clip_id": clip_id,
                 "event_type": event["type"],
-                "zone": event["zone"],
+                "zone": str(event.get("zone", "")),
                 "timestamp": str(event["timestamp"]),
             }
             for event in events

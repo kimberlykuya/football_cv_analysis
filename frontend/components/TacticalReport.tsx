@@ -35,8 +35,8 @@ function PressureZoneGrid({ zones }: { zones: Record<string, number[][]> }) {
                   key={`${ri}-${ci}`}
                   className="pressure-cell"
                   style={{
-                    background: `rgba(229, 57, 53, ${Math.min(val / 50, 1)})`,
-                    color: val > 25 ? "#fff" : "var(--ink)",
+                    background: `rgba(255, 255, 255, ${Math.min(val / 100, 1) * 0.5})`,
+                    color: val > 50 ? "#000" : "var(--ink)",
                   }}
                 >
                   {val}%
@@ -108,7 +108,42 @@ export default function TacticalReport({ analysis }: TacticalReportProps) {
             <MetricCard key={key} label={key} value={value} />
           ))}
         </div>
-        <p className="muted">{analysis.events_detected} tactical events detected</p>
+        <div style={{ marginTop: "12px" }}>
+          <p className="muted">{analysis.events_detected} tactical events detected</p>
+          <div
+            style={{
+              fontSize: "11px",
+              color: "rgba(255,255,255,0.5)",
+              marginTop: "6px",
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+            }}
+          >
+            <span
+              style={{
+                padding: "2px 8px",
+                background: "rgba(150,200,255,0.1)",
+                color: "#aaccff",
+                borderRadius: "3px",
+                fontWeight: "500",
+              }}
+            >
+              🧠 Qwen Validation
+            </span>
+            <span
+              style={{
+                padding: "2px 8px",
+                background: "rgba(255,255,255,0.1)",
+                color: "rgba(255,255,255,0.6)",
+                borderRadius: "3px",
+                fontWeight: "500",
+              }}
+            >
+              + Confidence Scoring
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="report-columns">
